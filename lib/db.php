@@ -292,6 +292,7 @@ class OC_DB {
 		if(self::$connection) {
 			self::$connection=false;
 			self::$DOCTRINE=false;
+			self::$preparedQueries = array();
 		}
 
 		return true;
@@ -306,7 +307,7 @@ class OC_DB {
 	 * TODO: write more documentation
 	 */
 	public static function getDbStructure( $file, $mode=MDB2_SCHEMA_DUMP_STRUCTURE) {
-		self::connectDoctrine();
+		self::connect();
 		return OC_DB_Schema::getDbStructure(self::$connection, $file);
 	}
 
@@ -318,8 +319,10 @@ class OC_DB {
 	 * TODO: write more documentation
 	 */
 	public static function createDbFromStructure( $file ) {
-		self::connectDoctrine();
-		return OC_DB_Schema::createDbFromStructure(self::$connection, $file);
+		self::connect();
+		$result = OC_DB_Schema::createDbFromStructure(self::$connection, $file);
+		self::disconnect();
+		return $result;
 		/* FIXME: use CURRENT_TIMESTAMP for all databases. mysql supports it as a default for DATETIME since 5.6.5 [1]
 		 * as a fallback we could use <default>0000-01-01 00:00:00</default> everywhere
 		 * [1] http://bugs.mysql.com/bug.php?id=27645
@@ -340,13 +343,14 @@ class OC_DB {
 	 * @return bool
 	 */
 	public static function updateDbFromStructure($file) {
-		self::connectDoctrine();
+		self::connect();
 		try {
 			$result = OC_DB_Schema::updateDbFromStructure(self::$connection, $file);
 		} catch (Exception $e) {
 			OC_Log::write('core', 'Failed to update database structure ('.$e.')', OC_Log::FATAL);
 			throw $e;
 		}
+		self::disconnect();
 		return $result;
 		/* FIXME: use CURRENT_TIMESTAMP for all databases. mysql supports it as a default for DATETIME since 5.6.5 [1]
 		 * as a fallback we could use <default>0000-01-01 00:00:00</default> everywhere
@@ -541,8 +545,9 @@ class OC_DB {
 	 * @param string $tableName the table to drop
 	 */
 	public static function dropTable($tableName) {
-		self::connectDoctrine();
+		self::connect();
 		OC_DB_Schema::dropTable(self::$connection, $tableName);
+		self::disconnect();
 	}
 
 	/**
@@ -550,8 +555,9 @@ class OC_DB {
 	 * @param string $file the xml file describing the tables
 	 */
 	public static function removeDBStructure($file) {
-		self::connectDoctrine();
+		self::connect();
 		OC_DB_Schema::removeDBStructure(self::$connection, $file);
+		self::disconnect();
 	}
 
 	/**
@@ -559,8 +565,9 @@ class OC_DB {
 	 * @param $file string path to the MDB2 xml db export file
 	 */
 	public static function replaceDB( $file ) {
-		self::connectDoctrine();
+		self::connect();
 		OC_DB_Schema::replaceDB(self::$connection, $file);
+		self::disconnect();
 	}
 
 	/**
