@@ -18,6 +18,9 @@ class Connection extends \Doctrine\DBAL\Connection {
 	protected $preparedQueries = array();
 	protected $cachingQueryStatementEnabled = true;
 
+	protected $fixup_from;
+	protected $fixup_to;
+
 	/**
 	 * Initializes a new instance of the Connection class.
 	 *
@@ -38,6 +41,10 @@ class Connection extends \Doctrine\DBAL\Connection {
 		parent::__construct($params, $driver, $config, $eventManager);
 		$this->table_prefix = $params['table_prefix'];
 		$this->sequence_suffix = $params['sequence_suffix'];
+		if (isset($params['fixups'])) {
+			$this->fixup_from = array_keys($params['fixups']);
+			$this->fixup_to = array_values($params['fixups']);
+		}
 	}
 
 	/**
@@ -47,7 +54,8 @@ class Connection extends \Doctrine\DBAL\Connection {
 	 * @return \Doctrine\DBAL\Driver\Statement The prepared statement.
 	 */
 	public function prepare( $statement, $limit=null, $offset=null ) {
-		$statement = $this->replaceTablePrefix($statement);
+		$statement = $this->fixupStatement($statement);
+
 		if ($limit === -1) {
 			$limit = null;
 		}
@@ -89,6 +97,14 @@ class Connection extends \Doctrine\DBAL\Connection {
 	// internal use
 	public function replaceTablePrefix($statement) {
 		return str_replace( '*PREFIX*', $this->table_prefix, $statement );
+	}
+
+	public function fixupStatement($statement) {
+		$statement = $this->replaceTablePrefix($statement);
+		if ($this->fixup_from) {
+			$statement = str_ireplace( $this->fixup_from, $this->fixup_to, $statement );
+		}
+		return $statement;
 	}
 
 	public function enableQueryStatementCaching() {

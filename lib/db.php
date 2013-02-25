@@ -123,6 +123,11 @@ class OC_DB {
 							'path' => $datadir.'/'.$name.'.db',
 							'driver' => 'pdo_sqlite',
 					);
+					$connectionParams['fixups'] = array(
+						'`' => '"',
+						'NOW()' => 'datetime(\'now\')',
+						'UNIX_TIMESTAMP()' => 'strftime(\'%s\',\'now\')',
+					);
 					break;
 				case 'mysql':
 					$connectionParams = array(
@@ -144,6 +149,10 @@ class OC_DB {
 							'dbname' => $name,
 							'driver' => 'pdo_pgsql',
 					);
+					$connectionParams['fixups'] = array(
+						'`' => '"',
+						'UNIX_TIMESTAMP()' => 'cast(extract(epoch from current_timestamp) as integer)',
+					);
 					break;
 				case 'oci':
 					$connectionParams = array(
@@ -155,6 +164,10 @@ class OC_DB {
 							'charset' => 'AL32UTF8',
 							'driver' => 'oci8',
 					);
+					$connectionParams['fixups'] = array(
+						'`' => '"',
+						'NOW()' => 'CURRENT_TIMESTAMP',
+					);
 					break;
 				case 'mssql':
 					$connectionParams = array(
@@ -164,6 +177,11 @@ class OC_DB {
 							'port' => $port,
 							'dbname' => $name,
 							'driver' => 'pdo_sqlsrv',
+					);
+					$connectionParams['fixups'] = array(
+						'NOW()' => 'CURRENT_TIMESTAMP',
+						'LENGTH(' => 'LEN(',
+						'SUBSTR(' => 'SUBSTRING(',
 					);
 					break;
 				default:
@@ -203,9 +221,6 @@ class OC_DB {
 	 * SQL query via Doctrine prepare(), needs to be execute()'d!
 	 */
 	static public function prepare( $query, $limit=null, $offset=null ) {
-		// Optimize the query
-		$query = self::processQuery( $query );
-
 		self::connect();
 		// return the result
 		if (self::$backend == self::BACKEND_DOCTRINE) {
@@ -390,101 +405,6 @@ class OC_DB {
 		return $result->execute();
 	}
 
-	/**
-	 * @brief does minor changes to query
-	 * @param string $query Query string
-	 * @return string corrected query string
-	 *
-	 * This function replaces *PREFIX* with the value of $CONFIG_DBTABLEPREFIX
-	 * and replaces the ` with ' or " according to the database driver.
-	 */
-	private static function processQuery( $query ) {
-		self::connect();
-		// We need Database type
-		if(is_null(self::$type)) {
-			self::$type=OC_Config::getValue( "dbtype", "sqlite" );
-		}
-		$type = self::$type;
-
-		// differences in escaping of table names ('`' for mysql) and getting the current timestamp
-		if( $type == 'sqlite' || $type == 'sqlite3' ) {
-			$query = str_replace( '`', '"', $query );
-			$query = str_ireplace( 'NOW()', 'datetime(\'now\')', $query );
-			$query = str_ireplace( 'UNIX_TIMESTAMP()', 'strftime(\'%s\',\'now\')', $query );
-		} elseif( $type == 'pgsql' ) {
-			$query = str_replace( '`', '"', $query );
-			$query = str_ireplace( 'UNIX_TIMESTAMP()', 'cast(extract(epoch from current_timestamp) as integer)',
-				$query );
-		} elseif( $type == 'oci'  ) {
-			$query = str_replace( '`', '"', $query );
-			$query = str_ireplace( 'NOW()', 'CURRENT_TIMESTAMP', $query );
-		}elseif( $type == 'mssql' ) {
-			$query = preg_replace( "/\`(.*?)`/", "[$1]", $query );
-			$query = str_replace( 'NOW()', 'CURRENT_TIMESTAMP', $query );
-			$query = str_replace( 'now()', 'CURRENT_TIMESTAMP', $query );
-			$query = str_replace( 'LENGTH(', 'LEN(', $query );
-			$query = str_replace( 'SUBSTR(', 'SUBSTRING(', $query );
-            
-            $query = self::fixLimitClauseForMSSQL($query);
-        }
-
-		return $query;
-	}
-
-    private static function fixLimitClauseForMSSQL($query) {
-        $limitLocation = stripos ($query, "LIMIT");
-        
-        if ( $limitLocation === false ) {
-            return $query;
-        } 
-        
-        // total == 0 means all results - not zero results
-        //
-        // First number is either total or offset, locate it by first space
-        //
-        $offset = substr ($query, $limitLocation + 5);
-        $offset = substr ($offset, 0, stripos ($offset, ' '));
-        $offset = trim ($offset);
-
-        // check for another parameter
-        if (stripos ($offset, ',') === false) {
-            // no more parameters
-            $offset = 0;
-            $total = intval ($offset);
-        } else {
-            // found another parameter
-            $offset = intval ($offset);
-
-            $total = substr ($query, $limitLocation + 5);
-            $total = substr ($total, stripos ($total, ','));
-
-            $total = substr ($total, 0, stripos ($total, ' '));
-            $total = intval ($total);
-        }
-
-        $query = trim (substr ($query, 0, $limitLocation));
-
-        if ($offset == 0 && $total !== 0) {
-            if (strpos($query, "SELECT") === false) {
-                $query = "TOP {$total} " . $query;
-            } else {
-                $query = preg_replace('/SELECT(\s*DISTINCT)?/Dsi', 'SELECT$1 TOP '.$total, $query);
-            }
-        } else if ($offset > 0) {
-            $query = preg_replace('/SELECT(\s*DISTINCT)?/Dsi', 'SELECT$1 TOP(10000000) ', $query);
-            $query = 'SELECT *
-                    FROM (SELECT sub2.*, ROW_NUMBER() OVER(ORDER BY sub2.line2) AS line3
-                    FROM (SELECT 1 AS line2, sub1.* FROM (' . $query . ') AS sub1) as sub2) AS sub3';
-
-            if ($total > 0) {
-                $query .= ' WHERE line3 BETWEEN ' . ($offset + 1) . ' AND ' . ($offset + $total);
-            } else {
-                $query .= ' WHERE line3 > ' . $offset;
-            }
-        }
-        return $query;
-    }
-    
 	/**
 	 * @brief drop a table
 	 * @param string $tableName the table to drop
