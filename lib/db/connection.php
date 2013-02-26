@@ -21,6 +21,8 @@ class Connection extends \Doctrine\DBAL\Connection {
 	protected $fixup_from;
 	protected $fixup_to;
 
+	protected $adapter;
+
 	/**
 	 * Initializes a new instance of the Connection class.
 	 *
@@ -38,6 +40,9 @@ class Connection extends \Doctrine\DBAL\Connection {
 		if (!isset($params['sequence_suffix'])) {
 			throw new Exception('sequence_suffix not set');
 		}
+		if (!isset($params['adapter'])) {
+			throw new Exception('adapter not set');
+		}
 		parent::__construct($params, $driver, $config, $eventManager);
 		$this->table_prefix = $params['table_prefix'];
 		$this->sequence_suffix = $params['sequence_suffix'];
@@ -45,6 +50,7 @@ class Connection extends \Doctrine\DBAL\Connection {
 			$this->fixup_from = array_keys($params['fixups']);
 			$this->fixup_to = array_values($params['fixups']);
 		}
+		$this->adapter = new $params['adapter']($this);
 	}
 
 	/**
@@ -94,12 +100,24 @@ class Connection extends \Doctrine\DBAL\Connection {
 		return parent::lastInsertId($seqName);
 	}
 
+	/**
+	 * @brief Insert a row if a matching row doesn't exists.
+	 * @param string $table. The table to insert into in the form '*PREFIX*tableName'
+	 * @param array $input. An array of fieldname/value pairs
+	 * @returns bool The return value from execute()
+	 */
+	public function insertIfNotExist($table, $input) {
+		return $this->adapter->insertIfNotExist($table, $input);
+	}
+
 	// internal use
-	public function replaceTablePrefix($statement) {
+	protected function replaceTablePrefix($statement) {
 		return str_replace( '*PREFIX*', $this->table_prefix, $statement );
 	}
 
-	public function fixupStatement($statement) {
+
+	// internal use
+	protected function fixupStatement($statement) {
 		$statement = $this->replaceTablePrefix($statement);
 		if ($this->fixup_from) {
 			$statement = str_ireplace( $this->fixup_from, $this->fixup_to, $statement );

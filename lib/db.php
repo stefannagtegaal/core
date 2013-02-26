@@ -88,6 +88,7 @@ class OC_DB {
 						'NOW()' => 'datetime(\'now\')',
 						'UNIX_TIMESTAMP()' => 'strftime(\'%s\',\'now\')',
 					);
+					$connectionParams['adapter'] = '\OC\DB\AdapterSqlite';
 					break;
 				case 'mysql':
 					$connectionParams = array(
@@ -99,6 +100,7 @@ class OC_DB {
 							'charset' => 'UTF8',
 							'driver' => 'pdo_mysql',
 					);
+					$connectionParams['adapter'] = '\OC\DB\Adapter';
 					break;
 				case 'pgsql':
 					$connectionParams = array(
@@ -113,6 +115,7 @@ class OC_DB {
 						'`' => '"',
 						'UNIX_TIMESTAMP()' => 'cast(extract(epoch from current_timestamp) as integer)',
 					);
+					$connectionParams['adapter'] = '\OC\DB\Adapter';
 					break;
 				case 'oci':
 					$connectionParams = array(
@@ -128,6 +131,7 @@ class OC_DB {
 						'`' => '"',
 						'NOW()' => 'CURRENT_TIMESTAMP',
 					);
+					$connectionParams['adapter'] = '\OC\DB\Adapter';
 					break;
 				case 'mssql':
 					$connectionParams = array(
@@ -143,6 +147,7 @@ class OC_DB {
 						'LENGTH(' => 'LEN(',
 						'SUBSTR(' => 'SUBSTRING(',
 					);
+					$connectionParams['adapter'] = '\OC\DB\Adapter';
 					break;
 				default:
 					return false;
@@ -292,71 +297,11 @@ class OC_DB {
 	 * @brief Insert a row if a matching row doesn't exists.
 	 * @param string $table. The table to insert into in the form '*PREFIX*tableName'
 	 * @param array $input. An array of fieldname/value pairs
-	 * @returns The return value from DoctrineStatementWrapper->execute()
+	 * @returns bool The return value from DoctrineStatementWrapper->execute()
 	 */
 	public static function insertIfNotExist($table, $input) {
 		self::connect();
-		$table = self::$connection->replaceTablePrefix( $table );
-
-		if(is_null(self::$type)) {
-			self::$type=OC_Config::getValue( "dbtype", "sqlite" );
-		}
-		$type = self::$type;
-
-		$query = '';
-		// differences in escaping of table names ('`' for mysql) and getting the current timestamp
-		if( $type == 'sqlite' || $type == 'sqlite3' ) {
-			// NOTE: For SQLite we have to use this clumsy approach
-			// otherwise all fieldnames used must have a unique key.
-			$query = 'SELECT * FROM "' . $table . '" WHERE ';
-			foreach($input as $key => $value) {
-				$query .= $key . " = '" . $value . '\' AND ';
-			}
-			$query = substr($query, 0, strlen($query) - 5);
-			try {
-				$stmt = self::prepare($query);
-				$result = $stmt->execute();
-			} catch(\Doctrine\DBAL\DBALException $e) {
-				$entry = 'DB Error: "'.$e->getMessage() . '"<br />';
-				$entry .= 'Offending command was: ' . $query . '<br />';
-				OC_Log::write('core', $entry, OC_Log::FATAL);
-				error_log('DB error: '.$entry);
-				OC_Template::printErrorPage( $entry );
-			}
-
-			if($result->numRows() == 0) {
-				$query = 'INSERT INTO "' . $table . '" ("'
-					. implode('","', array_keys($input)) . '") VALUES("'
-					. implode('","', array_values($input)) . '")';
-			} else {
-				return true;
-			}
-		} elseif( $type == 'pgsql' || $type == 'oci' || $type == 'mysql' || $type == 'mssql') {
-			$query = 'INSERT INTO `' .$table . '` ('
-				. implode(',', array_keys($input)) . ') SELECT \''
-				. implode('\',\'', array_values($input)) . '\' FROM ' . $table . ' WHERE ';
-
-			foreach($input as $key => $value) {
-				$query .= $key . " = '" . $value . '\' AND ';
-			}
-			$query = substr($query, 0, strlen($query) - 5);
-			$query .= ' HAVING COUNT(*) = 0';
-		}
-
-		// TODO: oci should be use " (quote) instead of ` (backtick).
-		//OC_Log::write('core', __METHOD__ . ', type: ' . $type . ', query: ' . $query, OC_Log::DEBUG);
-
-		try {
-			$result = self::prepare($query);
-		} catch(\Doctrine\DBAL\DBALException $e) {
-			$entry = 'DB Error: "'.$e->getMessage() . '"<br />';
-			$entry .= 'Offending command was: ' . $query.'<br />';
-			OC_Log::write('core', $entry, OC_Log::FATAL);
-			error_log('DB error: ' . $entry);
-			OC_Template::printErrorPage( $entry );
-		}
-
-		return $result->execute();
+		return self::$connection->insertIfNotExist($table, $input);
 	}
 
 	/**
