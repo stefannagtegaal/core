@@ -9,6 +9,7 @@
 namespace OC\DB;
 use Doctrine\DBAL\Driver;
 use Doctrine\DBAL\Configuration;
+use Doctrine\DBAL\Cache\QueryCacheProfile;
 use Doctrine\Common\EventManager;
 
 class Connection extends \Doctrine\DBAL\Connection {
@@ -79,6 +80,43 @@ class Connection extends \Doctrine\DBAL\Connection {
 			$this->preparedQueries[$rawQuery] = $result;
 		}
 		return $result;
+	}
+
+	/**
+	 * Executes an, optionally parameterized, SQL query.
+	 *
+	 * If the query is parameterized, a prepared statement is used.
+	 * If an SQLLogger is configured, the execution is logged.
+	 *
+	 * @param string $query The SQL query to execute.
+	 * @param array $params The parameters to bind to the query, if any.
+	 * @param array $types The types the previous parameters are in.
+	 * @param QueryCacheProfile $qcp
+	 * @return \Doctrine\DBAL\Driver\Statement The executed statement.
+	 * @internal PERF: Directly prepares a driver statement, not a wrapper.
+	 */
+	public function executeQuery($query, array $params = array(), $types = array(), QueryCacheProfile $qcp = null)
+	{
+		$query = $this->replaceTablePrefix($query);
+		return parent::executeQuery($query, $params, $types, $qcp);
+	}
+
+	/**
+	 * Executes an SQL INSERT/UPDATE/DELETE query with the given parameters
+	 * and returns the number of affected rows.
+	 *
+	 * This method supports PDO binding types as well as DBAL mapping types.
+	 *
+	 * @param string $query The SQL query.
+	 * @param array $params The query parameters.
+	 * @param array $types The parameter types.
+	 * @return integer The number of affected rows.
+	 * @internal PERF: Directly prepares a driver statement, not a wrapper.
+	 */
+	public function executeUpdate($query, array $params = array(), array $types = array())
+	{
+		$query = $this->replaceTablePrefix($query);
+		return parent::executeUpdate($query, $params, $types);
 	}
 
 	/**
