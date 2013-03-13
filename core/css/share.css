@@ -97,3 +97,5 @@
 	overflow-y:auto;
 	overflow-x:hidden;
 }
+
+#crudmultiselect { display: none !important; }
