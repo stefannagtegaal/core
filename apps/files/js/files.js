@@ -326,6 +326,9 @@ $(document).ready(function() {
 					// TODO: show nice progress bar in file row
 				},
 				progressall: function(e, data) {
+					if($.browser.msie && parseInt($.browser.version) < 10) {
+						return;
+					}
 					var progress = (data.loaded/data.total)*100;
 					$('#uploadprogressbar').progressbar('value',progress);
 				},
@@ -376,6 +379,9 @@ $(document).ready(function() {
 				stop: function(e, data) {
 					if(data.dataType !== 'iframe') {
 						$('#upload input.stop').hide();
+					}
+					if($.browser.msie && parseInt($.browser.version) < 10) {
+						return;
 					}
 					$('#uploadprogressbar').progressbar('value',100);
 					$('#uploadprogressbar').fadeOut();
